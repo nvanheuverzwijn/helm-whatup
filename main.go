@@ -293,9 +293,9 @@ func fetchIndices(client *helm.Client) ([]*repo.IndexFile, error) {
 	if err != nil {
 		if err == repo.ErrRepoOutOfDate { // notest
 			return nil, fmt.Errorf("helm repo is out of date! please update with 'helm repo update'")
-		} else {
-			return nil, fmt.Errorf("could not load repositories file '%s': %s", rfp, err)
 		}
+
+                return nil, fmt.Errorf("could not load repositories file '%s': %s", rfp, err)
 	}
 
 	if len(repofile.Repositories) == 0 { // notest
