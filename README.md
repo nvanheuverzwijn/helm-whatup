@@ -8,6 +8,7 @@
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/a6cb2c603e46476fbc68dcfc767d10ea)](https://www.codacy.com/app/benniciemanuel78/helm-whatup?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=fabmation-gmbh/helm-whatup&amp;utm_campaign=Badge_Grade)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/3007/badge)](https://bestpractices.coreinfrastructure.org/projects/3007)
 
+[![Latest Release](https://github-basic-badges.herokuapp.com/release/fabmation-gmbh/helm-whatup.svg)]()
 
 This Repo is a fork of [bacongobbler/helm-whatup][], because the original project is no longer actively further developed.
 
