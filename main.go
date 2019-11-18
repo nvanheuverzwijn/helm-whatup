@@ -17,7 +17,6 @@ import (
 	helmenv "k8s.io/helm/pkg/helm/environment"
 	"k8s.io/helm/pkg/proto/hapi/release"
 	"k8s.io/helm/pkg/repo"
-	"k8s.io/helm/pkg/tlsutil"
 )
 
 var outputFormat string
@@ -94,18 +93,6 @@ func run(cmd *cobra.Command, args []string) error {
 
 func newClient() (*helm.Client, error) {
 	/// === Pre-Checks ===
-	if settings.TillerHost == "" {
-		if os.Getenv("TILLER_HOST") != "" {
-			settings.TillerHost = os.Getenv("TILLER_HOST")
-		} else if os.Getenv("HELM_HOST") != "" {
-			settings.TillerHost = os.Getenv("HELM_HOST")
-		}
-
-		if settings.TillerHost == "" { // notest
-			return nil, fmt.Errorf("error: Tiller Host not set")
-		}
-	}
-
 	if settings.TLSCaCertFile == helmenv.DefaultTLSCaCert || settings.TLSCaCertFile == "" {
 		settings.TLSCaCertFile = fmt.Sprintf("%s/%s", os.ExpandEnv("$HELM_HOME"), settings.Home.TLSCaCert())
 	} else {
@@ -132,33 +119,8 @@ func newClient() (*helm.Client, error) {
 		settings.TLSVerify, _ = strconv.ParseBool(os.Getenv("HELM_TLS_VERIFY"))
 	}
 
-	options := []helm.Option{helm.Host(settings.TillerHost)}
-
-	debug("Tiller Host: \"%s\", TLS Enabled: \"%t\", TLS Verify: \"%t\"",
-		settings.TillerHost, settings.TLSEnable, settings.TLSVerify)
+	options := []helm.Option{}
 	debug("Helm Home: \"%s\"", settings.Home)
-
-	// check if TLS is enabled
-	if settings.TLSEnable || settings.TLSVerify {
-		debug("Host=%q, Key=%q, Cert=%q, CA=%q\n", settings.TLSServerName, settings.TLSKeyFile, settings.TLSCertFile, settings.TLSCaCertFile)
-
-		tlsopts := tlsutil.Options{
-			ServerName:         settings.TillerHost,
-			CaCertFile:         settings.TLSCaCertFile,
-			CertFile:           settings.TLSCertFile,
-			KeyFile:            settings.TLSKeyFile,
-			InsecureSkipVerify: !settings.TLSVerify,
-		}
-
-		tlscfg, err := tlsutil.ClientConfig(tlsopts)
-
-		if err != nil {
-			_, _ = fmt.Fprintln(os.Stderr, err)
-			return nil, err
-		}
-
-		options = append(options, helm.WithTLS(tlscfg))
-	}
 
 	return helm.NewClient(options...), nil
 }
@@ -295,7 +257,7 @@ func fetchIndices(client *helm.Client) ([]*repo.IndexFile, error) {
 			return nil, fmt.Errorf("helm repo is out of date! please update with 'helm repo update'")
 		}
 
-                return nil, fmt.Errorf("could not load repositories file '%s': %s", rfp, err)
+		return nil, fmt.Errorf("could not load repositories file '%s': %s", rfp, err)
 	}
 
 	if len(repofile.Repositories) == 0 { // notest
