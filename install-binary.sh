@@ -5,6 +5,11 @@
 PROJECT_NAME="helm-whatup"
 PROJECT_GH="fabmation-gmbh/${PROJECT_NAME}"
 
+# set HELM_HOME if it is not set, to the default Value
+if [ -z "${HELM_HOME}" ]; then
+        export HELM_HOME="${HOME}/.helm"
+fi
+
 : ${HELM_PLUGIN_PATH:="${HELM_HOME}/plugins/helm-whatup"}
 
 if [[ ${SKIP_BIN_INSTALL} == "1" ]]; then
