@@ -8,6 +8,8 @@
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/a6cb2c603e46476fbc68dcfc767d10ea)](https://www.codacy.com/app/benniciemanuel78/helm-whatup?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=fabmation-gmbh/helm-whatup&amp;utm_campaign=Badge_Grade)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/3007/badge)](https://bestpractices.coreinfrastructure.org/projects/3007)
 
+[![Latest Release](https://github-basic-badges.herokuapp.com/release/fabmation-gmbh/helm-whatup.svg)]()
+[![Latest Release Downloads](https://github-basic-badges.herokuapp.com/downloads/fabmation-gmbh/helm-whatup/latest/total.svg)]()
 
 This Repo is a fork of [bacongobbler/helm-whatup][], because the original project is no longer actively further developed.
 
@@ -15,6 +17,14 @@ This is a Helm plugin to help users determine if there's an update available for
 It works by reading your locally cached index files from the chart repositories (via `helm repo update`) and checking
 the version against the latest deployed version of your charts in the Kubernetes cluster.
 
+## Support
+
+| `whatup` Version | Supported helm version |
+|------------------|------------------------|
+| 0.2.x            | 2.x                    |
+| 0.3.x            | 3.x                    |
+
+_NOTE: If you use a helm v3 Client you need to install the latest `whatup` Version!_
 
 ## Usage
 
@@ -40,7 +50,6 @@ If you would like to handle the build yourself, instead of fetching a binary, th
 First, set up your environment:
 
 - You need to have [Go](http://golang.org) installed. Make sure to set `$GOPATH`
-- You need to have [Glide](http://glide.sh) installed.
 
 Clone this repo into your `$GOPATH` using git.
 
