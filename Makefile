@@ -42,5 +42,5 @@ dist:
 
 .PHONY: bootstrap
 bootstrap:
-	glide install
-	go get -u github.com/dave/courtney
+	go mod download
+	# go get -u github.com/dave/courtney
