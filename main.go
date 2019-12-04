@@ -1,321 +1,351 @@
-// Copyright (c) 2019 FABMation GmbH
-// All Rights Reserved
+/*
+Copyright The Helm Authors.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
-	"strconv"
+	"path/filepath"
+	"strings"
 
-	"github.com/jedib0t/go-pretty/table"
+	"github.com/Masterminds/semver/v3"
+	"github.com/gosuri/uitable"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 
-	"k8s.io/helm/pkg/helm"
-	helmenv "k8s.io/helm/pkg/helm/environment"
-	"k8s.io/helm/pkg/proto/hapi/release"
-	"k8s.io/helm/pkg/repo"
-	"k8s.io/helm/pkg/tlsutil"
+	"helm.sh/helm/v3/cmd/helm/require"
+	"helm.sh/helm/v3/cmd/helm/search"
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/cli/output"
+	"helm.sh/helm/v3/pkg/helmpath"
+	"helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v3/pkg/repo"
 )
-
-var outputFormat string
-var devel bool
-var logDebug bool
-var formatOutputReturn bool // Return the formatted Output
-var version = "canary"
 
 var (
-	settings helmenv.EnvSettings
+	settings = cli.New()
 )
-
-const (
-	statusOutdated = "OUTDATED"
-	statusUptodate = "UPTODATE"
-)
-
-// ChartVersionInfo contains all relevant Informations about Chart Releases in Tiller/ Helm
-type ChartVersionInfo struct {
-	ReleaseName      string `json:"releaseName"`      // Helm Release Name
-	ChartName        string `json:"chartName"`        // Chart Name of the Release
-	InstalledVersion string `json:"installedVersion"` // Installed Chart Version
-	LatestVersion    string `json:"latestVersion"`    // Latest available Version of Chart
-	Status           string `json:"status"`           // Status of Release: Is Release UpToDate or Outdated
-}
 
 func main() {
-	cmd := &cobra.Command{
-		Use:     "whatup [flags]",
-		Short:   fmt.Sprintf("check if installed charts are out of date"),
-		RunE:    run,
-		Version: version,
+	// get action config first
+	actionConfig := new(action.Configuration)
+
+	err := actionConfig.Init(settings.RESTClientGetter(), settings.Namespace(), os.Getenv("HELM_DRIVER"), debug)
+	if err != nil {
+		log.Fatalf("Error while initializing actionConfig: %s", err.Error())
 	}
 
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "Output format, choose from plain, json, yaml, table")
-	cmd.Flags().BoolVarP(&devel, "devel", "d", false, "Whether to include pre-releases or not, defaults to false.")
-	cmd.Flags().BoolVarP(&logDebug, "deb", "D", false, "Print Debug Logs, defaults to false.")
+	rootCmd := newOutdatedCmd(actionConfig, os.Stdout)
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatalf("There was an error while executing the Command: %s", err.Error())
+	}
+}
 
-	if err := cmd.Execute(); err != nil {
+var outdatedHelp = `
+This Command lists all releases which are outdated.
+
+By default, the output is printed in a Table but you can change this behavior
+with the '--output' Flag.
+`
+
+func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
+	client := action.NewList(cfg)
+	var outfmt output.Format
+
+	cmd := &cobra.Command{
+		Use:     "outdated",
+		Short:   "list outdated releases",
+		Long:    outdatedHelp,
+		Aliases: []string{"od"},
+		Args:    require.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if client.AllNamespaces {
+				if err := cfg.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"), debug); err != nil {
+					return err
+				}
+			}
+			client.SetStateMask()
+
+			releases, err := client.Run()
+			if err != nil {
+				return err
+			}
+
+			devel, err := cmd.Flags().GetBool("devel")
+			if err != nil {
+				return err
+			}
+			return outfmt.Write(out, newOutdatedListWriter(releases, cfg, out, devel))
+		},
+	}
+
+	flags := cmd.Flags()
+	flags.Bool("devel", false, "use development versions (alpha, beta, and release candidate releases), too. Equivalent to version '>0.0.0-0'.")
+	flags.BoolVarP(&client.Short, "short", "q", false, "output short (quiet) listing format")
+	flags.BoolVarP(&client.ByDate, "date", "d", false, "sort by release date")
+	flags.BoolVarP(&client.SortReverse, "reverse", "r", false, "reverse the sort order")
+	flags.BoolVarP(&client.All, "all", "a", false, "show all releases, not just the ones marked deployed or failed")
+	flags.BoolVar(&client.Uninstalled, "uninstalled", false, "show uninstalled releases")
+	flags.BoolVar(&client.Superseded, "superseded", false, "show superseded releases")
+	flags.BoolVar(&client.Uninstalling, "uninstalling", false, "show releases that are currently being uninstalled")
+	flags.BoolVar(&client.Deployed, "deployed", false, "show deployed releases. If no other is specified, this will be automatically enabled")
+	flags.BoolVar(&client.Failed, "failed", false, "show failed releases")
+	flags.BoolVar(&client.Pending, "pending", false, "show pending releases")
+	flags.BoolVarP(&client.AllNamespaces, "all-namespaces", "A", false, "list releases across all namespaces")
+	flags.IntVarP(&client.Limit, "max", "m", 256, "maximum number of releases to fetch")
+	flags.IntVar(&client.Offset, "offset", 0, "next release name in the list, used to offset from start value")
+	bindOutputFlag(cmd, &outfmt)
+
+	return cmd
+}
+
+type outdatedElement struct {
+	Name         string `json:"name"`
+	Namespace    string `json:"namespace"`
+	InstalledVer string `json:"installed_version"`
+	LatestVer    string `json:"latest_version"`
+	Chart        string `json:"chart"`
+}
+
+type outdatedListWriter struct {
+	releases []outdatedElement // Outdated releases
+}
+
+func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuration, out io.Writer, devel bool) *outdatedListWriter {
+	outdated := make([]outdatedElement, 0, len(releases))
+
+	// we initialize the Struct with default Options but the 'devel' option
+	// can be set by the User, all the other ones are not relevant.
+	searchRepo := searchRepoOptions{
+		versions:     false,
+		regexp:       false,
+		devel:        devel,
+		maxColWidth:  50,
+		version:      "",
+		repoFile:     settings.RepositoryConfig,
+		repoCacheDir: settings.RepositoryCache,
+	}
+
+	// initialize Repo index first
+	index, err := initSearch(out, &searchRepo)
+	if err != nil {
+		// TODO: Find a better way to exit
+		fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
 		os.Exit(1)
 	}
-}
 
-func run(cmd *cobra.Command, args []string) error {
-	client, err := newClient()
-	if err != nil {
-		return err
-	}
-
-	releases, err := fetchReleases(client)
-	if err != nil {
-		return err
-	}
-
-	repositories, err := fetchIndices(client)
-	if err != nil {
-		return err
-	}
-
-	result, err := parseReleases(releases, repositories)
-	if err != nil {
-		return err
-	}
-
-	// output Informations
-	_, err = formatOutput(result)
-	if err != nil {
-		debug("There was an Error while formatting and printing the Results")
-		return err
-	}
-
-	return nil
-}
-
-func newClient() (*helm.Client, error) {
-	/// === Pre-Checks ===
-	if settings.TillerHost == "" {
-		if os.Getenv("TILLER_HOST") != "" {
-			settings.TillerHost = os.Getenv("TILLER_HOST")
-		} else if os.Getenv("HELM_HOST") != "" {
-			settings.TillerHost = os.Getenv("HELM_HOST")
-		}
-
-		if settings.TillerHost == "" { // notest
-			return nil, fmt.Errorf("error: Tiller Host not set")
-		}
-	}
-
-	if settings.TLSCaCertFile == helmenv.DefaultTLSCaCert || settings.TLSCaCertFile == "" {
-		settings.TLSCaCertFile = fmt.Sprintf("%s/%s", os.ExpandEnv("$HELM_HOME"), settings.Home.TLSCaCert())
-	} else {
-		settings.TLSCaCertFile = os.ExpandEnv(settings.TLSCaCertFile)
-	}
-
-	if settings.TLSCertFile == helmenv.DefaultTLSCert || settings.TLSCertFile == "" {
-		settings.TLSCertFile = fmt.Sprintf("%s/%s", os.ExpandEnv("$HELM_HOME"), settings.Home.TLSCert())
-	} else {
-		settings.TLSCertFile = os.ExpandEnv(settings.TLSCertFile)
-	}
-
-	if settings.TLSKeyFile == helmenv.DefaultTLSKeyFile || settings.TLSKeyFile == "" {
-		settings.TLSKeyFile = fmt.Sprintf("%s/%s", os.ExpandEnv("$HELM_HOME"), settings.Home.TLSKey())
-	} else {
-		settings.TLSKeyFile = os.ExpandEnv(settings.TLSKeyFile)
-	}
-
-	if os.Getenv("HELM_TLS_ENABLE") != "" {
-		settings.TLSEnable, _ = strconv.ParseBool(os.Getenv("HELM_TLS_ENABLE"))
-	}
-
-	if os.Getenv("HELM_TLS_VERIFY") != "" {
-		settings.TLSVerify, _ = strconv.ParseBool(os.Getenv("HELM_TLS_VERIFY"))
-	}
-
-	options := []helm.Option{helm.Host(settings.TillerHost)}
-
-	debug("Tiller Host: \"%s\", TLS Enabled: \"%t\", TLS Verify: \"%t\"",
-		settings.TillerHost, settings.TLSEnable, settings.TLSVerify)
-	debug("Helm Home: \"%s\"", settings.Home)
-
-	// check if TLS is enabled
-	if settings.TLSEnable || settings.TLSVerify {
-		debug("Host=%q, Key=%q, Cert=%q, CA=%q\n", settings.TLSServerName, settings.TLSKeyFile, settings.TLSCertFile, settings.TLSCaCertFile)
-
-		tlsopts := tlsutil.Options{
-			ServerName:         settings.TillerHost,
-			CaCertFile:         settings.TLSCaCertFile,
-			CertFile:           settings.TLSCertFile,
-			KeyFile:            settings.TLSKeyFile,
-			InsecureSkipVerify: !settings.TLSVerify,
-		}
-
-		tlscfg, err := tlsutil.ClientConfig(tlsopts)
-
+	results := index.All()
+	for _, r := range releases {
+		// search if it exists a newer Chart in the Chart-Repository
+		repoResult, err := searchChart(results, r.Chart.Name(), r.Chart.Metadata.Version, devel)
 		if err != nil {
-			_, _ = fmt.Fprintln(os.Stderr, err)
-			return nil, err
+			fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
+			os.Exit(1)
 		}
 
-		options = append(options, helm.WithTLS(tlscfg))
+		// skip if no newer Chart was found
+		if repoResult == nil {
+			continue
+		}
+
+		outdated = append(outdated, outdatedElement{
+			Name:         r.Name,
+			Namespace:    r.Namespace,
+			InstalledVer: r.Chart.Metadata.Version,
+			LatestVer:    repoResult.Chart.Metadata.Version,
+			Chart:        repoResult.Chart.Name,
+		})
 	}
 
-	return helm.NewClient(options...), nil
+	return &outdatedListWriter{outdated}
 }
 
-func formatOutput(result []ChartVersionInfo) ([]byte, error) {
-	switch outputFormat {
-	case "table":
-		debug("formatOutput: outputFormat: 'table'")
-
-		_table := table.NewWriter()
-		_table.SetOutputMirror(os.Stdout)
-
-		_table.AppendHeader(table.Row{"Release Name", "Installed version", "Available version"})
-
-		for _, versionInfo := range result {
-			if versionInfo.LatestVersion != versionInfo.InstalledVersion {
-				_table.AppendRow(table.Row{versionInfo.ReleaseName, versionInfo.InstalledVersion, versionInfo.LatestVersion})
-			}
-		}
-
-		// print Table
-		_table.Render()
-
-	case "plain":
-		debug("formatOuput: outputFormat: 'plain'")
-
-		for _, versionInfo := range result {
-			if versionInfo.LatestVersion != versionInfo.InstalledVersion {
-				fmt.Printf("There is an update available for helm_release %s (%s)!\nInstalled version: %s\nAvailable version: %s\n", versionInfo.ReleaseName, versionInfo.ChartName, versionInfo.InstalledVersion, versionInfo.LatestVersion)
-			} else {
-				fmt.Printf("Release %s (%s) is up to date.\n", versionInfo.ReleaseName, versionInfo.LatestVersion) // notest
-			}
-		}
-		fmt.Println("Done.")
-
-	case "json":
-		debug("formatOuput: outputFormat: 'json'")
-
-		outputBytes, err := json.MarshalIndent(result, "", "    ")
-		if err != nil {
-			return nil, err
-		}
-		fmt.Println(string(outputBytes))
-
-		if formatOutputReturn {
-			return outputBytes, nil
-		}
-
-	case "yml":
-		fallthrough
-	case "yaml":
-		debug("formatOuput: outputFormat: 'yaml'")
-
-		outputBytes, err := yaml.Marshal(result)
-		if err != nil {
-			return nil, err
-		}
-		fmt.Println(string(outputBytes))
-
-	default:
-		return nil, fmt.Errorf("invalid output formatter: '%s'", outputFormat) // notest
-	}
-
-	return nil, nil
-}
-
-func parseReleases(releases []*release.Release, repositories []*repo.IndexFile) ([]ChartVersionInfo, error) {
-	var result []ChartVersionInfo
-
-	for _, helmRelease := range releases {
-		for _, idx := range repositories {
-			if idx.Has(helmRelease.Chart.Metadata.Name, helmRelease.Chart.Metadata.Version) {
-				// fetch latest helm_release
-				constraint := ""
-				// Include pre-releases
-				if devel {
-					constraint = ">= *-0" // notest
-				}
-				chartVer, err := idx.Get(helmRelease.Chart.Metadata.Name, constraint)
-
-				if err != nil {
-					return nil, err
-				}
-
-				versionStatus := ChartVersionInfo{
-					ReleaseName:      helmRelease.Name,
-					ChartName:        helmRelease.Chart.Metadata.Name,
-					InstalledVersion: helmRelease.Chart.Metadata.Version,
-					LatestVersion:    chartVer.Version,
-				}
-
-				if versionStatus.InstalledVersion == versionStatus.LatestVersion { // notest
-					versionStatus.Status = statusUptodate
-				} else {
-					versionStatus.Status = statusOutdated
-				}
-				result = append(result, versionStatus)
-			}
-		}
-	}
-
-	return result, nil
-}
-
-func fetchReleases(client *helm.Client) ([]*release.Release, error) {
-	res, err := client.ListReleases()
-
+func initSearch(out io.Writer, o *searchRepoOptions) (*search.Index, error) {
+	index, err := o.buildIndex(out)
 	if err != nil {
 		return nil, err
 	}
 
-	if res == nil { // notest
-		return nil, errors.New("no releases found :(")
-	}
-
-	return res.Releases, nil
+	return index, nil
 }
 
-func fetchIndices(client *helm.Client) ([]*repo.IndexFile, error) {
-	indices := []*repo.IndexFile{}
-	rfp := os.Getenv("HELM_PATH_REPOSITORY_FILE")
-	if rfp == "" { // notest
-		rfp = fmt.Sprintf("%s/repository/repositories.yaml", os.ExpandEnv("$HELM_HOME"))
+// searchChart searches for Repositories which are containing that chart.
+//
+// It will return a Pointer to the Chart Result (the Pointer points to the
+// Result of the Index).
+// If no results are found, nil will be returned instead of type *Result.
+func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (*search.Result, error) {
+	found := false // found describres if Charts where found but no one is newer than the actual one
 
-		// check if File exists
-		if _, err := os.Stat(rfp); os.IsNotExist(err) {
-			return nil, fmt.Errorf("helm repository file ($HELM_HOME/repository/repositories.yaml) does not exists. Try to run 'helm repo update'")
+	// TODO: implement a better Searchalgorithm. Because this is an
+	// linear search algorithm so it takes O(len(r)) steps in the worst case
+	for _, result := range r {
+		// check if the Chart-Result Name is that one we are searching for.
+		if strings.HasSuffix(strings.ToLower(result.Name), strings.ToLower(name)) {
+			// check if Version is newer than the actual one
+			version, err := semver.NewVersion(result.Chart.Metadata.Version)
+			if err != nil {
+				return nil, err
+			}
+
+			var constrainStr string
+			if devel {
+				constrainStr = "> " + chartVersion + "-0" + " != " + chartVersion
+			} else {
+				constrainStr = "> " + chartVersion
+			}
+
+			constrain, err := semver.NewConstraint(constrainStr)
+			if err != nil {
+				return nil, err
+			}
+
+			debug("Comparing version of original chart '%s' => %s with version (%s) %s",
+				name, chartVersion, result.Name, result.Chart.Metadata.Version)
+			debug("Using '%s' as constrain against '%s'", constrainStr, result.Chart.Metadata.Version)
+			if constrain.Check(version) {
+				return result, nil
+			}
+
+			// set 'found' to true because a Repository contains
+			// the Chart but the Version is not newer than
+			// the installed one.
+			found = true
 		}
 	}
 
-	repofile, err := repo.LoadRepositoriesFile(rfp)
-	if err != nil {
-		if err == repo.ErrRepoOutOfDate { // notest
-			return nil, fmt.Errorf("helm repo is out of date! please update with 'helm repo update'")
-		}
-
-                return nil, fmt.Errorf("could not load repositories file '%s': %s", rfp, err)
+	if !found {
+		debug("Could not find any Repo which contains %s", name)
+		return nil, errors.New(fmt.Sprintf("Could not find any Repo which contains %s", name))
 	}
 
-	if len(repofile.Repositories) == 0 { // notest
-		return nil, errors.New("no repositories found. run `helm repo update` and re-try")
+	debug("No newer Chart was found for '%s'", name)
+	return nil, nil
+}
+
+func (r *outdatedListWriter) WriteTable(out io.Writer) error {
+	table := uitable.New()
+	table.AddRow("NAME", "NAMESPACE", "INSTALLED VERSION", "LATEST VERSION", "CHART")
+	for _, r := range r.releases {
+		table.AddRow(r.Name, r.Namespace, r.InstalledVer, r.LatestVer, r.Chart)
+	}
+	return output.EncodeTable(out, table)
+}
+
+func (r *outdatedListWriter) WriteJSON(out io.Writer) error {
+	return output.EncodeJSON(out, r.releases)
+}
+
+func (r *outdatedListWriter) WriteYAML(out io.Writer) error {
+	return output.EncodeYAML(out, r.releases)
+}
+
+/// ===== Internal required Functions ====== ///
+func debug(format string, v ...interface{}) {
+	if settings.Debug {
+		format = fmt.Sprintf("[debug] %s\n", format)
+		log.Output(2, fmt.Sprintf(format, v...))
+	}
+}
+
+// NOTE: Copied from https://github.com/helm/helm/blob/c05d78915190775fa9a79d8ebc85f57398331266/cmd/helm/flags.go#L54
+const outputFlag = "output"
+
+// bindOutputFlag will add the output flag to the given command and bind the
+// value to the given format pointer
+func bindOutputFlag(cmd *cobra.Command, varRef *output.Format) {
+	cmd.Flags().VarP(newOutputValue(output.Table, varRef), outputFlag, "o",
+		fmt.Sprintf("prints the output in the specified format. Allowed values: %s", strings.Join(output.Formats(), ", ")))
+	// Setup shell completion for the flag
+	cmd.MarkFlagCustom(outputFlag, "__helm_output_options")
+}
+
+// NOTE: Copied from https://github.com/helm/helm/blob/c05d78915190775fa9a79d8ebc85f57398331266/cmd/helm/flags.go#L63
+type outputValue output.Format
+
+func newOutputValue(defaultValue output.Format, p *output.Format) *outputValue {
+	*p = defaultValue
+	return (*outputValue)(p)
+}
+
+// func getNamespace() string {
+//         // we can (try?) to get the current Namespace from the kubeConfig
+//         kube.GetConfig(settings, context string, namespace string)
+//         restClient := settings.
+// }
+
+// NOTE: This is copied from https://github.com/helm/helm/blob/c05d78915190775fa9a79d8ebc85f57398331266/cmd/helm/search_repo.go#L62
+type searchRepoOptions struct {
+	versions     bool
+	regexp       bool
+	devel        bool
+	version      string
+	maxColWidth  uint
+	repoFile     string
+	repoCacheDir string
+	outputFormat output.Format
+}
+
+// NOTE: This is copied from https://github.com/helm/helm/blob/c05d78915190775fa9a79d8ebc85f57398331266/cmd/helm/search_repo.go#L170
+func (o *searchRepoOptions) buildIndex(out io.Writer) (*search.Index, error) {
+	// Load the repositories.yaml
+	rf, err := repo.LoadFile(o.repoFile)
+	if isNotExist(err) || len(rf.Repositories) == 0 {
+		return nil, errors.New("no repositories configured")
 	}
 
-	for _, repository := range repofile.Repositories {
-		idx, err := repo.LoadIndexFile(repository.Cache)
+	i := search.NewIndex()
+	for _, re := range rf.Repositories {
+		n := re.Name
+		f := filepath.Join(o.repoCacheDir, helmpath.CacheIndexFile(n))
+		ind, err := repo.LoadIndexFile(f)
 		if err != nil {
-			return nil, fmt.Errorf("could not load index file '%s': %s", repository.Cache, err)
+			// TODO should print to stderr
+			fmt.Fprintf(out, "WARNING: Repo %q is corrupt or missing. Try 'helm repo update'.", n)
+			continue
 		}
-		indices = append(indices, idx)
-	}
 
-	return indices, nil
+		i.AddRepo(n, ind, o.versions || len(o.version) > 0)
+	}
+	return i, nil
 }
 
-func debug(format string, args ...interface{}) {
-	if logDebug {
-		format = fmt.Sprintf("[DEBUG] %s\n", format)
-		fmt.Printf(format, args...)
+// NOTE: This is copied from https://github.com/helm/helm/blob/c05d78915190775fa9a79d8ebc85f57398331266/cmd/helm/repo.go#L52
+func isNotExist(err error) bool {
+	return os.IsNotExist(errors.Cause(err))
+}
+
+// NOTE: Copied from  https://github.com/helm/helm/blob/c05d78915190775fa9a79d8ebc85f57398331266/cmd/helm/flags.go#L68
+func (o *outputValue) String() string {
+	// It is much cleaner looking (and technically less allocations) to just
+	// convert to a string rather than type asserting to the underlying
+	// output.Format
+	return string(*o)
+}
+
+func (o *outputValue) Type() string {
+	return "format"
+}
+
+func (o *outputValue) Set(s string) error {
+	outfmt, err := output.ParseFormat(s)
+	if err != nil {
+		return err
 	}
+	*o = outputValue(outfmt)
+	return nil
 }

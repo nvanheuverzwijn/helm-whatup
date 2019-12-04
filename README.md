@@ -17,6 +17,14 @@ This is a Helm plugin to help users determine if there's an update available for
 It works by reading your locally cached index files from the chart repositories (via `helm repo update`) and checking
 the version against the latest deployed version of your charts in the Kubernetes cluster.
 
+## Support
+
+| `whatup` Version | Supported helm version |
+|------------------|------------------------|
+| 0.2.x            | 2.x                    |
+| 0.3.x            | 3.x                    |
+
+_NOTE: If you use a helm v3 Client you need to install the latest `whatup` Version!_
 
 ## Usage
 
@@ -42,7 +50,6 @@ If you would like to handle the build yourself, instead of fetching a binary, th
 First, set up your environment:
 
 - You need to have [Go](http://golang.org) installed. Make sure to set `$GOPATH`
-- You need to have [Glide](http://glide.sh) installed.
 
 Clone this repo into your `$GOPATH` using git.
 

@@ -85,8 +85,8 @@ installFile() {
   HELM_TMP="/tmp/${PROJECT_NAME}"
   mkdir -p "${HELM_TMP}"
   tar xf "${PLUGIN_TMP_FILE}" -C "${HELM_TMP}"
-  echo "Preparing to install into ${HELM_PLUGIN_PATH}"
-  cp -R "${HELM_TMP}/bin" "${HELM_PLUGIN_PATH}/"
+  echo "Preparing to install into ${HELM_PLUGIN_DIR}"
+  cp -R "${HELM_TMP}/bin" "${HELM_PLUGIN_DIR}/"
 }
 
 # fail_trap is executed if an error occurs.
@@ -102,8 +102,8 @@ fail_trap() {
 # testVersion tests the installed client to make sure it is working.
 testVersion() {
   set +e
-  echo "${PROJECT_NAME} installed into ${HELM_PLUGIN_PATH}/${PROJECT_NAME}"
-  ${HELM_PLUGIN_PATH}/bin/helm-whatup -h
+  echo "${PROJECT_NAME} installed into ${HELM_PLUGIN_DIR}/${PROJECT_NAME}"
+  ${HELM_PLUGIN_DIR}/bin/helm-whatup -h
   set -e
 }
 
