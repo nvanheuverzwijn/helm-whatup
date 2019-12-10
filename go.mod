@@ -14,6 +14,7 @@ require (
 	github.com/tidwall/gjson v1.3.5
 	github.com/tidwall/sjson v1.0.4
 	helm.sh/helm/v3 v3.0.0
+	k8s.io/client-go v0.0.0-20191016111102-bec269661e48
 )
 
 replace github.com/docker/docker => github.com/docker/docker v0.0.0-20190731150326-928381b2215c

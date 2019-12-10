@@ -21,6 +21,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/gosuri/uitable"
 	"github.com/pkg/errors"
