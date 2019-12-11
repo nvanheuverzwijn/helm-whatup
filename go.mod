@@ -13,7 +13,7 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/tidwall/gjson v1.3.5
 	github.com/tidwall/sjson v1.0.4
-	helm.sh/helm/v3 v3.0.0
+	helm.sh/helm/v3 v3.0.1
 	k8s.io/client-go v0.0.0-20191016111102-bec269661e48
 )
 
