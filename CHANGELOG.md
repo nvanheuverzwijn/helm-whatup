@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 
+## v0.3.2 (2019-12-17)
+
+### Added (1 change)
+
+- Add 'ignore-repo' Flag ([8af200d0a5b5e30e9eb06135e07289572710b7f2](https://github.com/helm/helm/commit/8af200d0a5b5e30e9eb06135e07289572710b7f2))
+
+
+
 ## v0.3.1 (2019-12-11)
 
 ### Fixed (1 change)
