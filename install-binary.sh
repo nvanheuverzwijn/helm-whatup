@@ -10,8 +10,6 @@ if [ -z "${HELM_HOME}" ]; then
         export HELM_HOME="${HOME}/.helm"
 fi
 
-: ${HELM_PLUGIN_PATH:="${HELM_HOME}/plugins/helm-whatup"}
-
 if [[ ${SKIP_BIN_INSTALL} == "1" ]]; then
   echo "Skipping binary install"
   exit

@@ -65,6 +65,8 @@ By default, the output is printed in a Table but you can change this behavior
 with the '--output' Flag.
 `
 
+var ignoreNoRepo bool = false
+
 func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	client := action.NewList(cfg)
 	var outfmt output.Format
@@ -97,6 +99,7 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	}
 
 	flags := cmd.Flags()
+	flags.BoolVar(&ignoreNoRepo, "ignore-repo", false, "ignore error if no repo for a chart is found")
 	flags.Bool("devel", false, "use development versions (alpha, beta, and release candidate releases), too. Equivalent to version '>0.0.0-0'.")
 	flags.BoolVarP(&client.Short, "short", "q", false, "output short (quiet) listing format")
 	flags.BoolVarP(&client.ByDate, "date", "d", false, "sort by release date")
@@ -156,8 +159,13 @@ func newOutdatedListWriter(releases []*release.Release, cfg *action.Configuratio
 		// search if it exists a newer Chart in the Chart-Repository
 		repoResult, err := searchChart(results, r.Chart.Name(), r.Chart.Metadata.Version, devel)
 		if err != nil {
-			fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
-			os.Exit(1)
+			if !ignoreNoRepo {
+				fmt.Fprintf(out, "%s", errors.Wrap(err, "ERROR: Could not initialize search index").Error())
+				os.Exit(1)
+			} else {
+				fmt.Fprintf(out, "WARNING: No Repo was found which containing the Chart '%s' (skipping)\n", r.Chart.Name())
+				continue
+			}
 		}
 
 		// skip if no newer Chart was found
