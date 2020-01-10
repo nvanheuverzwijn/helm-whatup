@@ -33,6 +33,19 @@ helm repo update
 helm whatup
 ```
 
+## Example
+
+Example output of `helm whatup`:
+
+```bash
+NAME                       	NAMESPACE	INSTALLED VERSION	LATEST VERSION	CHART                      
+atlassian-confluence-server	devops   	1.0.4            	1.0.5         	atlassian-confluence-server
+atlassian-crucible         	devops   	0.1.1            	0.1.3         	atlassian-crucible         
+atlassian-jira-software    	devops   	0.3.10           	0.3.11        	atlassian-jira-software    
+confluence-mysql           	devops   	1.4.0            	1.6.2         	mysql                      
+fileshare                  	devops   	1.7.0            	1.9.1         	nextcloud                  
+fileshare-postgres         	devops   	6.2.1            	8.1.2         	postgresql
+```
 
 ## Install
 
