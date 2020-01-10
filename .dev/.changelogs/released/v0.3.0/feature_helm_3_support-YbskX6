@@ -1,2 +1,0 @@
-title: Add check for unset HELM_HOME Env Variable to the install Script
-type: 2
