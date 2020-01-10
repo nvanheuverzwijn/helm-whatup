@@ -1,2 +1,2 @@
-title: Add check for unset HELM_HOME Env Variable to the install Script
+title: Add check for unset HELM_HOME Env Variable to the install Script ([#10](https://github.com/fabmation-gmbh/helm-whatup/issues/10))
 type: 1
