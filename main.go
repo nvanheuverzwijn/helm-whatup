@@ -203,6 +203,10 @@ func initSearch(out io.Writer, o *searchRepoOptions) (*search.Index, error) {
 // If no results are found, nil will be returned instead of type *Result.
 // And the bool describes if it may be some Repositories contain a deprecated chart.
 func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (*search.Result, bool, error) {
+	//  since we have now to check also if a repository contains an
+	// deprecated chart we need an "point" where to look if we have found
+	// a newer chart version
+	foundNewer := false
 	found := false                 // found describres if Charts where found but no one is newer than the actual one
 	var duplicate []*search.Result // this variable contains all repositories which contains the searched chart
 
@@ -238,16 +242,20 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 				// are deprecated repositories.
 				if !deprecationInfo {
 					return result, false, nil
+				} else {
+					foundNewer = true
 				}
 			}
 
-			// add this Repository to the @duplicate variable, even
-			// if the version is not newer than the current installed.
-			// This is because if the chart was installed at the time
-			// where the repository stopped maintaining the Chart
-			// we would not know it – later – that this Repo is
-			// deperecated.
-			duplicate = append(duplicate, result)
+			if deprecationInfo {
+				// add this Repository to the @duplicate variable, even
+				// if the version is not newer than the current installed.
+				// This is because if the chart was installed at the time
+				// where the repository stopped maintaining the Chart
+				// we would not know it – later – that this Repo is
+				// deperecated.
+				duplicate = append(duplicate, result)
+			}
 
 			// set 'found' to true because a Repository contains
 			// the Chart but the Version is not newer than
@@ -261,8 +269,15 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 		return nil, false, errors.New(fmt.Sprintf("Could not find any Repo which contains %s", name))
 	}
 
-	// if @duplicate contains more than 1 entry then we have to check if
-	// a repository contains a deprecated Chart.
+	if deprecationInfo && foundNewer {
+		// if @duplicate contains more than 1 entry then we have to check if
+		// a repository contains a deprecated Chart.
+		if len(duplicate) > 1 {
+			checkDeprecation(duplicate)
+		}
+
+		return nil, true, nil
+	}
 
 	debug("No newer Chart was found for '%s'", name)
 	return nil, false, nil
