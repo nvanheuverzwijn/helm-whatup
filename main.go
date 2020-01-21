@@ -301,6 +301,11 @@ func (r *outdatedListWriter) WriteYAML(out io.Writer) error {
 }
 
 /// ===== Internal required Functions ====== ///
+
+func checkDeprecation(res []*search.Result) {
+
+}
+
 func debug(format string, v ...interface{}) {
 	if settings.Debug {
 		format = fmt.Sprintf("[debug] %s\n", format)
