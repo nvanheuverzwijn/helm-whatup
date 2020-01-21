@@ -100,7 +100,7 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	}
 
 	flags := cmd.Flags()
-	flags.BoolVar(&deprecatedFlags, "deprecation-notice", true, "disable it to prevent printing the deprecation notice message")
+	flags.BoolVar(&deprecationInfo, "deprecation-notice", true, "disable it to prevent printing the deprecation notice message")
 	flags.BoolVar(&ignoreNoRepo, "ignore-repo", false, "ignore error if no repo for a chart is found")
 	flags.Bool("devel", false, "use development versions (alpha, beta, and release candidate releases), too. Equivalent to version '>0.0.0-0'.")
 	flags.BoolVarP(&client.Short, "short", "q", false, "output short (quiet) listing format")
