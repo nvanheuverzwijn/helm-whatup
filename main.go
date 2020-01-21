@@ -202,7 +202,7 @@ func initSearch(out io.Writer, o *searchRepoOptions) (*search.Index, error) {
 // Result of the Index).
 // If no results are found, nil will be returned instead of type *Result.
 // And the bool describes if it may be some Repositories contain a deprecated chart.
-func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (*search.Result, dupl bool, error) {
+func searchChart(r []*search.Result, name string, chartVersion string, devel bool) (*search.Result, bool, error) {
 	found := false                 // found describres if Charts where found but no one is newer than the actual one
 	var duplicate []*search.Result // this variable contains all repositories which contains the searched chart
 
@@ -214,7 +214,7 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 			// check if Version is newer than the actual one
 			version, err := semver.NewVersion(result.Chart.Metadata.Version)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 
 			var constrainStr string
@@ -226,7 +226,7 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 			constrain, err := semver.NewConstraint(constrainStr)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 
 			debug("Comparing version of original chart '%s' => %s with version (%s) %s",
@@ -237,7 +237,7 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 				// because then we do not have to chec if there
 				// are deprecated repositories.
 				if !deprecationInfo {
-					return result, nil
+					return result, false, nil
 				}
 			}
 
@@ -258,14 +258,14 @@ func searchChart(r []*search.Result, name string, chartVersion string, devel boo
 
 	if !found {
 		debug("Could not find any Repo which contains %s", name)
-		return nil, errors.New(fmt.Sprintf("Could not find any Repo which contains %s", name))
+		return nil, false, errors.New(fmt.Sprintf("Could not find any Repo which contains %s", name))
 	}
 
 	// if @duplicate contains more than 1 entry then we have to check if
 	// a repository contains a deprecated Chart.
 
 	debug("No newer Chart was found for '%s'", name)
-	return nil, nil
+	return nil, false, nil
 }
 
 func (r *outdatedListWriter) WriteTable(out io.Writer) error {
