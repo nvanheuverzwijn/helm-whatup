@@ -34,9 +34,9 @@ build:
 .PHONY: dist
 dist:
 	mkdir -p $(DIST)
-	GOOS=linux GOARCH=amd64 go build -o bin/helm-whatup ./main.go
+	GOOS=linux GOARCH=amd64 go build -o bin/helm-whatup -ldflags $(LDFLAGS) ./main.go
 	tar -zcvf $(DIST)/helm-whatup-$(VERSION)-linux-amd64.tar.gz bin/helm-whatup README.md LICENSE.md plugin.yaml
-	GOOS=darwin GOARCH=amd64 go build -o bin/helm-whatup ./main.go
+	GOOS=darwin GOARCH=amd64 go build -o bin/helm-whatup -ldflags $(LDFLAGS) ./main.go
 	tar -zcvf $(DIST)/helm-whatup-$(VERSION)-darwin-amd64.tar.gz bin/helm-whatup README.md LICENSE.md plugin.yaml
 
 
