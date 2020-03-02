@@ -1,8 +1,9 @@
 HELM_HOME ?= $(shell helm home)
 HELM_PLUGIN_DIR ?= $(HELM_HOME)/plugins/helm-whatup
 VERSION := $(shell sed -n -e 's/version:[ "]*\([^"]*\).*/\1/p' plugin.yaml)
+GIT_COMMIT := $(shell git rev-list -1 HEAD)
 DIST := $(CURDIR)/_dist
-LDFLAGS := "-X main.version=${VERSION}"
+LDFLAGS := "-X main.version=${VERSION} -X main.gitCommit=${GIT_COMMIT}"
 
 .PHONY: helmrel
 helmrel:
