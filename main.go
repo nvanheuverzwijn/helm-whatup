@@ -85,7 +85,7 @@ func newOutdatedCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
                         if showVersion {
 		                fmt.Fprintln(out, "Version:", version)
 		                fmt.Fprintln(out, "GitCommit:", gitCommit)
-                                os.Exit(0);
+		                return nil
                         }
 			if client.AllNamespaces {
 				if err := cfg.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"), debug); err != nil {
